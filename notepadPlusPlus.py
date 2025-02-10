@@ -32,6 +32,9 @@ class AppModule(appModuleHandler.AppModule):
         self.edit = None  # Nettoyer l'objet d'édition
         nextHandler()
 
+    def _getIndentationLevel(self, lineText):
+        """Retourne le niveau d'indentation d'une ligne."""
+        return len(lineText) - len(lineText.lstrip())
 
     def script_moveToNextFunction(self, gesture):
         """Déplace le curseur vers la première ligne de la déclaration de fonction Python suivante."""
@@ -230,9 +233,194 @@ class AppModule(appModuleHandler.AppModule):
         else:
             log.debug("Aucun objet d'édition trouvé.")
 
+    def _selectClass(self, caretInfo):
+        """Sélectionne la classe entière à partir de la position du curseur en fonction de l'indentation."""
+        try:
+            # Trouver le début de la classe (ligne contenant "class")
+            startInfo = caretInfo.copy()
+            startInfo.expand(textInfos.UNIT_LINE)
+            startInfo.collapse()
+
+
+            # Obtenir le texte de la ligne de déclaration de la classe
+            startLineText = startInfo.text
+            startIndentation = self._getIndentationLevel(startLineText)
+
+
+            # Trouver la fin de la classe en parcourant les lignes suivantes
+            endInfo = startInfo.copy()
+            endInfo.expand(textInfos.UNIT_LINE)
+            endInfo.collapse(end=True)
+
+
+            lineCounter = 0  # Compteur de lignes
+
+
+            while True:
+                endInfo.move(textInfos.UNIT_LINE, 1)
+                endInfo.expand(textInfos.UNIT_LINE)
+                lineText = endInfo.text
+                currentIndentation = self._getIndentationLevel(lineText)
+
+
+                # Si l'indentation est inférieure ou égale à celle de la déclaration
+                if currentIndentation <= startIndentation:
+                    # Si la ligne contient du texte, on s'arrête
+                    if lineText.strip():
+                        # Revenir en arrière d'une ligne
+                        endInfo.move(textInfos.UNIT_LINE, -1)
+                        endInfo.expand(textInfos.UNIT_LINE)
+                        break
+
+
+                lineCounter += 1
+
+
+            # Appliquer la sélection
+            selectionInfo = self.edit.makeTextInfo(startInfo)
+            selectionInfo.setEndPoint(endInfo, "endToEnd")
+            self.edit.selection = selectionInfo
+
+
+            log.debug(f"Classe sélectionnée avec succès. Nombre de lignes sélectionnées : {lineCounter}")
+            speech.speakMessage(f"Classe sélectionnée. {lineCounter} lignes sélectionnées.")
+
+
+        except Exception as e:
+            log.error(f"Erreur lors de la sélection de la classe : {e}")
+            speech.speakMessage("Erreur lors de la sélection de la classe.")
+
+
+    def script_selectClass(self, gesture):
+        """Sélectionne la classe entière à partir de la première ligne."""
+        log.debug("Raccourci détecté (Ctrl+Shift+R)")
+
+
+        if self.edit:
+            try:
+                # Obtenir la position actuelle du curseur
+                caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
+                caretInfo.expand(textInfos.UNIT_LINE)  # Étendre à la ligne entière
+                lineText = caretInfo.text.strip()
+
+
+                # Vérifier si la ligne commence par "class " (déclaration de classe Python)
+                if lineText.startswith("class "):
+                    self._selectClass(caretInfo)
+                    log.debug("Classe sélectionnée avec succès.")
+                    speech.speakMessage("Classe sélectionnée.")
+                else:
+                    log.debug("Le curseur n'est pas sur une déclaration de classe.")
+                    speech.speakMessage("Le curseur n'est pas sur une déclaration de classe.")
+
+
+            except Exception as e:
+                log.error(f"Erreur lors de la sélection de la classe : {e}")
+        else:
+            log.debug("Aucun objet d'édition trouvé.")
+
+
+    # Ajout du raccourci clavier correspondant dans Notepad++
+    script_selectClass.__doc__ = _("Sélectionne la classe entière")
+    script_selectClass.category = "Notepad++"
+
+
+    def _selectFunction(self, caretInfo):
+        """Sélectionne la fonction entière à partir de la position du curseur en fonction de l'indentation."""
+        try:
+            # Trouver le début de la fonction (ligne contenant "def")
+            startInfo = caretInfo.copy()
+            startInfo.expand(textInfos.UNIT_LINE)
+            startInfo.collapse()
+
+
+            # Obtenir le texte de la ligne de déclaration de la fonction
+            startLineText = startInfo.text
+            startIndentation = self._getIndentationLevel(startLineText)
+
+
+            # Trouver la fin de la fonction en parcourant les lignes suivantes
+            endInfo = startInfo.copy()
+            endInfo.expand(textInfos.UNIT_LINE)
+            endInfo.collapse(end=True)
+
+
+            lineCounter = 0  # Compteur de lignes
+
+
+            while True:
+                endInfo.move(textInfos.UNIT_LINE, 1)
+                endInfo.expand(textInfos.UNIT_LINE)
+                lineText = endInfo.text
+                currentIndentation = self._getIndentationLevel(lineText)
+
+
+                # Si l'indentation est inférieure ou égale à celle de la déclaration
+                if currentIndentation <= startIndentation:
+                    # Si la ligne contient du texte, on s'arrête
+                    if lineText.strip():
+                        # Revenir en arrière d'une ligne
+                        endInfo.move(textInfos.UNIT_LINE, -1)
+                        endInfo.expand(textInfos.UNIT_LINE)
+                        break
+
+
+                lineCounter += 1
+
+
+            # Appliquer la sélection
+            selectionInfo = self.edit.makeTextInfo(startInfo)
+            selectionInfo.setEndPoint(endInfo, "endToEnd")
+            self.edit.selection = selectionInfo
+
+
+            log.debug(f"Fonction sélectionnée avec succès. Nombre de lignes sélectionnées : {lineCounter}")
+            speech.speakMessage(f"Fonction sélectionnée. {lineCounter} lignes sélectionnées.")
+
+
+        except Exception as e:
+            log.error(f"Erreur lors de la sélection de la fonction : {e}")
+            speech.speakMessage("Erreur lors de la sélection de la fonction.")
+
+
+    def script_selectFunction(self, gesture):
+        """Sélectionne la fonction entière à partir de la première ligne."""
+        log.debug("Raccourci détecté (Ctrl+R)")
+
+
+        if self.edit:
+            try:
+                # Obtenir la position actuelle du curseur
+                caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
+                caretInfo.expand(textInfos.UNIT_LINE)  # Étendre à la ligne entière
+                lineText = caretInfo.text.strip()
+
+
+                # Vérifier si la ligne commence par "def " (déclaration de fonction Python)
+                if lineText.startswith("def "):
+                    self._selectFunction(caretInfo)
+                    log.debug("Fonction sélectionnée avec succès.")
+                    speech.speakMessage("Fonction sélectionnée.")
+                else:
+                    log.debug("Le curseur n'est pas sur une déclaration de fonction.")
+                    speech.speakMessage("Le curseur n'est pas sur une déclaration de fonction.")
+
+
+            except Exception as e:
+                log.error(f"Erreur lors de la sélection de la fonction : {e}")
+        else:
+            log.debug("Aucun objet d'édition trouvé.")
+
+
+    # Ajout du raccourci clavier correspondant dans Notepad++
+    script_selectFunction.__doc__ = _("Sélectionne la fonction entière")
+    script_selectFunction.category = "Notepad++"
+
     __gestures = {
         "kb:NVDA+F2": "moveToNextFunction",
         "kb:Shift+F2": "moveToPreviousFunction",
         "kb:F7": "moveToNextClass",
         "kb:Shift+F7": "moveToPreviousClass",
+        "kb:control+shift+r": "selectClass",
+        "kb:control+r": "selectFunction",
     }
