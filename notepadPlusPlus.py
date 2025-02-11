@@ -2,8 +2,13 @@ import appModuleHandler
 import logging
 import speech
 import textInfos
-
-
+import gui  # Pour les boîtes de dialogue
+import api
+import wx
+import subprocess  # Pour lancer un terminal
+import os  # Pour manipuler les chemins de fichiers
+import keyboardHandler  # Pour simuler l'appui sur la touche Suppr
+import tempfile  # Pour créer des fichiers temporaires
 # Configuration du logger
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)  # Utiliser le niveau DEBUG pour voir tous les logs
@@ -134,7 +139,6 @@ class AppModule(appModuleHandler.AppModule):
             log.debug("Aucun objet d'édition trouvé.")
 
 
-    # Associer les raccourcis NVDA+F2 et Shift+F2 aux fonctions correspondantes
 
 
     def script_moveToNextClass(self, gesture):
@@ -416,6 +420,257 @@ class AppModule(appModuleHandler.AppModule):
     script_selectFunction.__doc__ = _("Sélectionne la fonction entière")
     script_selectFunction.category = "Notepad++"
 
+    
+
+    def _deleteClass(self, caretInfo):
+        """Supprime la classe entière à partir de la position du curseur après confirmation."""
+        try:
+            # Trouver le début de la classe (ligne contenant "class")
+            startInfo = caretInfo.copy()
+            startInfo.expand(textInfos.UNIT_LINE)
+            startInfo.collapse()
+
+            # Obtenir le texte de la ligne de déclaration de la classe
+            startLineText = startInfo.text
+            startIndentation = self._getIndentationLevel(startLineText)
+
+            # Trouver la fin de la classe en parcourir les lignes suivantes
+            endInfo = startInfo.copy()
+            endInfo.expand(textInfos.UNIT_LINE)
+            endInfo.collapse(end=True)
+
+            lineCounter = 0  # Compteur de lignes
+
+            while True:
+                endInfo.move(textInfos.UNIT_LINE, 1)
+                endInfo.expand(textInfos.UNIT_LINE)
+                lineText = endInfo.text
+                currentIndentation = self._getIndentationLevel(lineText)
+
+                # Si l'indentation est inférieure ou égale à celle de la déclaration
+                if currentIndentation <= startIndentation:
+                    # Si la ligne contient du texte, on s'arrête
+                    if lineText.strip():
+                        # Revenir en arrière d'une ligne
+                        endInfo.move(textInfos.UNIT_LINE, -1)
+                        endInfo.expand(textInfos.UNIT_LINE)
+                        break
+
+                lineCounter += 1
+
+            # Appliquer la sélection
+            selectionInfo = self.edit.makeTextInfo(startInfo)
+            selectionInfo.setEndPoint(endInfo, "endToEnd")
+            self.edit.selection = selectionInfo
+            speech.speakMessage(f"Tu es sûr le sang?.")
+            # Demander confirmation avant suppression avec un message personnalisé
+            if gui.messageBox(
+                "Voulez-vous vraiment supprimer cette classe ?",  # Message personnalisé
+                "Confirmation de suppression",  # Titre de la boîte de dialogue
+                wx.YES_NO | wx.ICON_QUESTION  # Boutons Oui/Non et icône de question
+            ) == wx.YES:
+                # Simuler l'appui sur la touche Suppr pour supprimer la sélection
+                keyboardHandler.KeyboardInputGesture.fromName("delete").send()
+                log.debug(f"Classe supprimée avec succès. Nombre de lignes supprimées : {lineCounter}")
+                speech.speakMessage(f"Classe supprimée. {lineCounter} lignes supprimées.")
+            else:
+                log.debug("Suppression annulée par l'utilisateur.")
+                speech.speakMessage("Suppression annulée.")
+
+        except Exception as e:
+            log.error(f"Erreur lors de la suppression de la classe : {e}")
+            speech.speakMessage("Erreur lors de la suppression de la classe.")
+
+    def script_deleteClass(self, gesture):
+        """Supprime la classe entière à partir de la première ligne après confirmation."""
+        log.debug("Raccourci détecté (Ctrl+Shift+Delete)")
+
+
+        if self.edit:
+            try:
+                # Obtenir la position actuelle du curseur
+                caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
+                caretInfo.expand(textInfos.UNIT_LINE)  # Étendre à la ligne entière
+                lineText = caretInfo.text.strip()
+
+
+                # Vérifier si la ligne commence par "class " (déclaration de classe Python)
+                if lineText.startswith("class "):
+                    self._deleteClass(caretInfo)
+                    log.debug("Classe supprimée avec succès.")
+                    speech.speakMessage("Classe supprimée.")
+                else:
+                    log.debug("Le curseur n'est pas sur une déclaration de classe.")
+                    speech.speakMessage("Le curseur n'est pas sur une déclaration de classe.")
+
+
+            except Exception as e:
+                log.error(f"Erreur lors de la suppression de la classe : {e}")
+        else:
+            log.debug("Aucun objet d'édition trouvé.")
+        # Ajout du raccourci clavier correspondant dans Notepad++
+    
+    script_deleteClass.__doc__ = _("Supprime la classe entière après confirmation")
+    script_deleteClass.category = "Notepad++"
+
+    def _deleteFunction(self, caretInfo):
+        """Supprime la fonction entière à partir de la position du curseur après confirmation."""
+        try:
+            # Trouver le début de la fonction (ligne contenant "def")
+            startInfo = caretInfo.copy()
+            startInfo.expand(textInfos.UNIT_LINE)
+            startInfo.collapse()
+
+
+            # Obtenir le texte de la ligne de déclaration de la fonction
+            startLineText = startInfo.text
+            startIndentation = self._getIndentationLevel(startLineText)
+
+
+            # Trouver la fin de la fonction en parcourir les lignes suivantes
+            endInfo = startInfo.copy()
+            endInfo.expand(textInfos.UNIT_LINE)
+            endInfo.collapse(end=True)
+
+
+            lineCounter = 0  # Compteur de lignes
+
+
+            while True:
+                endInfo.move(textInfos.UNIT_LINE, 1)
+                endInfo.expand(textInfos.UNIT_LINE)
+                lineText = endInfo.text
+                currentIndentation = self._getIndentationLevel(lineText)
+
+
+                # Si l'indentation est inférieure ou égale à celle de la déclaration
+                if currentIndentation <= startIndentation:
+                    # Si la ligne contient du texte, on s'arrête
+                    if lineText.strip():
+                        # Revenir en arrière d'une ligne
+                        endInfo.move(textInfos.UNIT_LINE, -1)
+                        endInfo.expand(textInfos.UNIT_LINE)
+                        break
+
+
+                lineCounter += 1
+
+
+            # Appliquer la sélection
+            selectionInfo = self.edit.makeTextInfo(startInfo)
+            selectionInfo.setEndPoint(endInfo, "endToEnd")
+            self.edit.selection = selectionInfo
+
+            speech.speakMessage(f"Tu es sûr le sang?.")
+
+            # Demander confirmation avant suppression
+            if gui.messageBox(
+                "Voulez-vous vraiment supprimer cette fonction ?",
+                "Confirmation de suppression",
+                wx.YES_NO | wx.ICON_QUESTION
+            ) == wx.YES:
+                # Simuler l'appui sur la touche Suppr pour supprimer la sélection
+                keyboardHandler.KeyboardInputGesture.fromName("delete").send()
+                log.debug(f"Fonction supprimée avec succès. Nombre de lignes supprimées : {lineCounter}")
+                speech.speakMessage(f"Fonction supprimée. {lineCounter} lignes supprimées.")
+            else:
+                log.debug("Suppression annulée par l'utilisateur.")
+                speech.speakMessage("Suppression annulée.")
+
+
+        except Exception as e:
+            log.error(f"Erreur lors de la suppression de la fonction : {e}")
+            speech.speakMessage("Erreur lors de la suppression de la fonction.")
+
+
+    def script_deleteFunction(self, gesture):
+        """Supprime la fonction entière à partir de la première ligne après confirmation."""
+        log.debug("Raccourci détecté (Ctrl+Delete)")
+
+
+        if self.edit:
+            try:
+                # Obtenir la position actuelle du curseur
+                caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
+                caretInfo.expand(textInfos.UNIT_LINE)  # Étendre à la ligne entière
+                lineText = caretInfo.text.strip()
+
+
+                # Vérifier si la ligne commence par "def " (déclaration de fonction Python)
+                if lineText.startswith("def "):
+                    self._deleteFunction(caretInfo)
+                    log.debug("Fonction supprimée avec succès.")
+                    speech.speakMessage("Fonction supprimée.")
+                else:
+                    log.debug("Le curseur n'est pas sur une déclaration de fonction.")
+                    speech.speakMessage("Le curseur n'est pas sur une déclaration de fonction.")
+
+
+            except Exception as e:
+                log.error(f"Erreur lors de la suppression de la fonction : {e}")
+        else:
+            log.debug("Aucun objet d'édition trouvé.")
+    
+    # Ajout du raccourci clavier correspondant dans Notepad++
+    script_deleteFunction.__doc__ = _("Supprime la fonction entière après confirmation")
+    script_deleteFunction.category = "Notepad++"
+
+
+    def _executePythonCode(self):
+        """Exécute le code Python dans un terminal."""
+        try:
+            # Obtenir le texte sélectionné ou le fichier entier
+            if self.edit.selection.text:
+                code = self.edit.selection.text
+                log.debug("Exécution du code sélectionné.")
+            else:
+                # Si rien n'est sélectionné, exécuter tout le fichier
+                code = self.edit.makeTextInfo(textInfos.POSITION_ALL).text
+                log.debug("Exécution du fichier entier.")
+
+
+            # Créer un fichier temporaire dans le répertoire TEMP de l'utilisateur
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as temp_file:
+                temp_file.write(code)
+                temp_file_path = temp_file.name
+
+
+            # Ouvrir un terminal et exécuter le script temporaire
+            systeme = os.name
+            if systeme == "nt":  # Windows
+                subprocess.Popen(["cmd", "/k", f"python {temp_file_path}"], creationflags=subprocess.CREATE_NEW_CONSOLE)
+            else:  # Linux et macOS
+                subprocess.Popen(["x-terminal-emulator", "-e", f"python3 {temp_file_path}"], close_fds=True)
+               
+            log.debug(f"Terminal ouvert et code exécuté. Fichier temporaire : {temp_file_path}")
+            speech.speakMessage("Code exécuté dans un terminal.")
+
+
+        except Exception as e:
+            log.error(f"Erreur lors de l'exécution du code : {e}")
+            speech.speakMessage("Erreur lors de l'exécution du code.")
+
+
+    def script_executePythonCode(self, gesture):
+        """Lance un terminal et exécute le code en cours."""
+        log.debug("Raccourci détecté (F5)")
+
+
+        if self.edit:
+            try:
+                self._executePythonCode()
+                log.debug("Code exécuté avec succès.")
+                speech.speakMessage("Code exécuté.")
+            except Exception as e:
+                log.error(f"Erreur lors de l'exécution du code : {e}")
+        else:
+            log.debug("Aucun objet d'édition trouvé.")
+
+
+    # Ajout du raccourci clavier correspondant dans Notepad++
+    script_executePythonCode.__doc__ = ("Exécute le code Python dans un terminal")
+    script_executePythonCode.category = "Notepad++"
+
     __gestures = {
         "kb:NVDA+F2": "moveToNextFunction",
         "kb:Shift+F2": "moveToPreviousFunction",
@@ -423,4 +678,7 @@ class AppModule(appModuleHandler.AppModule):
         "kb:Shift+F7": "moveToPreviousClass",
         "kb:control+shift+r": "selectClass",
         "kb:control+r": "selectFunction",
+        "kb:control+shift+delete": "deleteClass",
+        "kb:control+delete": "deleteFunction",
+        "kb:F5": "executePythonCode",
     }
