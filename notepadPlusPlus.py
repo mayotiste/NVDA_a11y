@@ -40,7 +40,6 @@ class AppModule(appModuleHandler.AppModule):
     def _getIndentationLevel(self, lineText):
         """Retourne le niveau d'indentation d'une ligne."""
         return len(lineText) - len(lineText.lstrip())
-
     def script_moveToNextFunction(self, gesture):
         """Déplace le curseur vers la première ligne de la déclaration de fonction Python suivante."""
         # Envoyer un message dans le journal de NVDA
@@ -671,14 +670,349 @@ class AppModule(appModuleHandler.AppModule):
     script_executePythonCode.__doc__ = ("Exécute le code Python dans un terminal")
     script_executePythonCode.category = "Notepad++"
 
+
+    def script_moveToNextIndentLevel(self, gesture):
+        """Déplace le curseur vers le prochain niveau d'indentation."""
+        # Envoyer un message dans le journal de NVDA
+        log.debug("Raccourci DETECTE (Alt+Down)")
+
+        # Vérifier si l'objet d'édition est disponible
+        if self.edit:
+            try:
+                # Obtenir la position actuelle du curseur
+                caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
+                caretInfo.expand(textInfos.UNIT_LINE)  # Étendre à la ligne entière
+                currentLineText = caretInfo.text
+                currentIndent = len(currentLineText) - len(currentLineText.lstrip())  # Calculer l'indentation actuelle
+                currentLine = caretInfo.bookmark.startOffset  # Initialiser la position de la ligne actuelle
+
+                # Parcourir les lignes suivantes pour trouver un niveau d'indentation différent
+                while True:
+                    # Déplacer le curseur à la ligne suivante
+                    caretInfo.move(textInfos.UNIT_LINE, 1)
+                    caretInfo.expand(textInfos.UNIT_LINE)
+                    lineText = caretInfo.text
+                    lineIndent = len(lineText) - len(lineText.lstrip())  # Calculer l'indentation de la ligne
+
+                    # Vérifier si l'indentation est différente de l'actuelle
+                    if lineIndent != currentIndent:
+                        # Déplacer le curseur au début de la ligne
+                        caretInfo.updateCaret()
+                        log.debug(f"Niveau d'indentation suivant trouvé : {lineText.strip()}")
+                        speech.speakMessage(f"Niveau d'indentation suivant trouvé : {lineText.strip()}")
+                        break
+
+                    # Si on atteint la fin du document, arrêter la recherche
+                    if caretInfo.bookmark.startOffset <= currentLine:
+                        log.debug("Aucun niveau d'indentation suivant trouvé.")
+                        speech.speakMessage("Aucun niveau d'indentation suivant trouvé.")
+                        break
+
+                    # Mettre à jour la position actuelle pour éviter les boucles infinies
+                    currentLine = caretInfo.bookmark.startOffset
+
+            except Exception as e:
+                log.error(f"Erreur lors de la recherche du niveau d'indentation suivant : {e}")
+        else:
+            log.debug("Aucun objet d'édition trouvé.")
+
+    def script_moveToPreviousIndentLevel(self, gesture):
+        """Déplace le curseur vers le niveau d'indentation précédent."""
+        log.debug("Raccourci Alt+Up détecté, exécution de moveToPreviousIndentLevel.")
+
+        if self.edit:
+            try:
+                caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
+                caretInfo.expand(textInfos.UNIT_LINE)
+                currentLineText = caretInfo.text
+                currentIndent = len(currentLineText) - len(currentLineText.lstrip())
+                currentLine = caretInfo.bookmark.startOffset
+
+                while True:
+                    caretInfo.move(textInfos.UNIT_LINE, -1)  # Déplacer à la ligne précédente
+                    caretInfo.expand(textInfos.UNIT_LINE)
+                    lineText = caretInfo.text
+                    lineIndent = len(lineText) - len(lineText.lstrip())
+
+                    if lineIndent != currentIndent:
+                        caretInfo.updateCaret()
+                        log.debug(f"Niveau d'indentation précédent trouvé : {lineText.strip()}")
+                        speech.speakMessage(f"Niveau d'indentation précédent trouvé : {lineText.strip()}")
+                        break
+
+                    if caretInfo.bookmark.startOffset >= currentLine:
+                        log.debug("Aucun niveau d'indentation précédent trouvé.")
+                        speech.speakMessage("Aucun niveau d'indentation précédent trouvé.")
+                        break
+
+                    currentLine = caretInfo.bookmark.startOffset
+
+            except Exception as e:
+                log.error(f"Erreur lors de la recherche du niveau d'indentation précédent : {e}")
+        else:
+            log.debug("Aucun objet d'édition trouvé.")
+
+    
+    def script_moveToNextIndentedLine(self, gesture):
+        """Déplace le curseur vers la prochaine ligne indentée, en ignorant les lignes vides et les lignes non indentées avec du texte."""
+        log.debug("Raccourci Control+Alt+Down détecté, exécution de moveToNextIndentedLine.")
+
+        if self.edit:
+            try:
+                # Obtenir la position actuelle du curseur
+                caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
+                caretInfo.expand(textInfos.UNIT_LINE)
+                currentLineText = caretInfo.text
+                currentIndent = len(currentLineText) - len(currentLineText.lstrip())  # Calculer l'indentation actuelle
+                currentLine = caretInfo.bookmark.startOffset  # Position de départ de la ligne actuelle
+
+                # Parcourir les lignes suivantes pour trouver une ligne indentée
+                while True:
+                    # Déplacer le curseur à la ligne suivante
+                    caretInfo.move(textInfos.UNIT_LINE, 1)
+                    caretInfo.expand(textInfos.UNIT_LINE)
+                    lineText = caretInfo.text
+                    lineIndent = len(lineText) - len(lineText.lstrip())  # Calculer l'indentation de la ligne
+
+                    # Vérifier si la ligne est indentée (indentation > 0) et non vide
+                    if lineIndent > 0 and lineText.strip():
+                        # Déplacer le curseur au début de la ligne
+                        caretInfo.updateCaret()
+                        log.debug(f"Ligne indentée suivante trouvée : {lineText.strip()}")
+                        speech.speakMessage(f"Ligne indentée suivante trouvée : {lineText.strip()}")
+                        break
+
+                    # Si on atteint la fin du document, arrêter la recherche
+                    if caretInfo.bookmark.startOffset <= currentLine:
+                        log.debug("Fin du document atteinte. Aucune ligne indentée suivante trouvée.")
+                        speech.speakMessage("Fin du document atteinte. Aucune ligne indentée suivante trouvée.")
+                        break
+
+                    # Mettre à jour la position actuelle pour éviter les boucles infinies
+                    currentLine = caretInfo.bookmark.startOffset
+
+            except Exception as e:
+                log.error(f"Erreur lors de la recherche de la ligne indentée suivante : {e}")
+        else:
+            log.debug("Aucun objet d'édition trouvé.")
+    
+    def script_moveToPreviousIndentedLine(self, gesture):
+        """Déplace le curseur vers la ligne indentée précédente."""
+        log.debug("Raccourci Control+Alt+Up détecté, exécution de moveToPreviousIndentedLine.")
+
+        if self.edit:
+            try:
+                caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
+                caretInfo.expand(textInfos.UNIT_LINE)
+                currentLineText = caretInfo.text
+                currentIndent = len(currentLineText) - len(currentLineText.lstrip())
+                currentLine = caretInfo.bookmark.startOffset
+
+                while True:
+                    caretInfo.move(textInfos.UNIT_LINE, -1)
+                    caretInfo.expand(textInfos.UNIT_LINE)
+                    lineText = caretInfo.text
+                    lineIndent = len(lineText) - len(lineText.lstrip())
+
+                    if lineIndent > 0:  # Trouver une ligne indentée
+                        caretInfo.updateCaret()
+                        log.debug(f"Ligne indentée précédente trouvée : {lineText.strip()}")
+                        speech.speakMessage(f"Ligne indentée précédente trouvée : {lineText.strip()}")
+                        break
+
+                    if caretInfo.bookmark.startOffset >= currentLine:
+                        log.debug("Aucune ligne indentée précédente trouvée.")
+                        speech.speakMessage("Aucune ligne indentée précédente trouvée.")
+                        break
+
+                    currentLine = caretInfo.bookmark.startOffset
+
+            except Exception as e:
+                log.error(f"Erreur lors de la recherche de la ligne indentée précédente : {e}")
+        else:
+            log.debug("Aucun objet d'édition trouvé.")
+
+    def script_selectToPreviousIndentLevel(self, gesture):
+        """Sélectionne le texte jusqu'au niveau d'indentation précédent, puis place le curseur au début de la sélection."""
+        log.debug("Raccourci Shift+Alt+Up détecté, exécution de selectToPreviousIndentLevel.")
+
+        if self.edit:
+            try:
+                # Obtenir la position actuelle du curseur
+                caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
+                caretInfo.expand(textInfos.UNIT_LINE)
+                currentLineText = caretInfo.text
+                currentIndent = len(currentLineText) - len(currentLineText.lstrip())  # Calculer l'indentation actuelle
+                startPosition = caretInfo.bookmark.startOffset  # Position de départ de la ligne actuelle
+
+                # Créer un objet TextInfo pour la sélection
+                selectionInfo = self.edit.makeTextInfo(textInfos.POSITION_SELECTION)
+                selectionInfo.setEndPoint(caretInfo, "endToEnd")  # Définir le point de départ de la sélection
+
+                # Parcourir les lignes précédentes pour trouver un niveau d'indentation différent
+                while True:
+                    # Déplacer le curseur à la ligne précédente
+                    caretInfo.move(textInfos.UNIT_LINE, -1)
+                    caretInfo.expand(textInfos.UNIT_LINE)
+                    lineText = caretInfo.text
+                    lineIndent = len(lineText) - len(lineText.lstrip())  # Calculer l'indentation de la ligne
+
+                    # Vérifier si l'indentation est différente de l'actuelle
+                    if lineIndent != currentIndent:
+                        # Sélectionner depuis la ligne actuelle jusqu'à cette ligne
+                        selectionInfo.setEndPoint(caretInfo, "startToStart")  # Définir le point de fin de la sélection
+                        selectionInfo.updateSelection()
+                        log.debug(f"Sélection jusqu'au niveau d'indentation précédent : {lineText.strip()}")
+                        speech.speakMessage(f"Sélection jusqu'au niveau d'indentation précédent : {lineText.strip()}")
+
+                        # Déplacer le curseur au début de la sélection
+                        startSelection = selectionInfo.copy()
+                        startSelection.collapse(start=True)  # Déplacer le curseur au début de la sélection
+                        startSelection.updateCaret()
+
+                        log.debug("Curseur déplacé au début de la sélection.")
+                        speech.speakMessage("Curseur déplacé au début de la sélection.")
+                        break
+
+                    # Si on atteint le début du document, arrêter la recherche
+                    if caretInfo.bookmark.startOffset >= startPosition:
+                        log.debug("Aucun niveau d'indentation précédent trouvé.")
+                        speech.speakMessage("Aucun niveau d'indentation précédent trouvé.")
+                        break
+
+            except Exception as e:
+                log.error(f"Erreur lors de la sélection jusqu'au niveau d'indentation précédent : {e}")
+        else:
+            log.debug("Aucun objet d'édition trouvé.")
+
+
+    def script_selectToNextIndentLevel(self, gesture):
+        """Sélectionne le texte jusqu'au prochain niveau d'indentation."""
+        log.debug("Raccourci Shift+Alt+Down détecté, exécution de selectToNextIndentLevel.")
+
+        if self.edit:
+            try:
+                caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
+                caretInfo.expand(textInfos.UNIT_LINE)
+                currentLineText = caretInfo.text
+                currentIndent = len(currentLineText) - len(currentLineText.lstrip())
+                startPosition = caretInfo.bookmark.startOffset
+
+                while True:
+                    caretInfo.move(textInfos.UNIT_LINE, 1)
+                    caretInfo.expand(textInfos.UNIT_LINE)
+                    lineText = caretInfo.text
+                    lineIndent = len(lineText) - len(lineText.lstrip())
+
+                    if lineIndent != currentIndent:
+                        # Sélectionner jusqu'à cette ligne
+                        selectionInfo = self.edit.makeTextInfo(textInfos.POSITION_SELECTION)
+                        selectionInfo.setEndPoint(caretInfo, "endToEnd")
+                        selectionInfo.updateSelection()
+                        log.debug(f"Sélection jusqu'au niveau d'indentation suivant : {lineText.strip()}")
+                        speech.speakMessage(f"Sélection jusqu'au niveau d'indentation suivant : {lineText.strip()}")
+                        break
+
+                    if caretInfo.bookmark.startOffset <= startPosition:
+                        log.debug("Aucun niveau d'indentation suivant trouvé.")
+                        speech.speakMessage("Aucun niveau d'indentation suivant trouvé.")
+                        break
+
+            except Exception as e:
+                log.error(f"Erreur lors de la sélection jusqu'au niveau d'indentation suivant : {e}")
+        else:
+            log.debug("Aucun objet d'édition trouvé.")
+
+
+    def script_moveToFirstLineInIndentation(self, gesture):
+        """Déplace le curseur vers la première ligne du niveau d'indentation actuel."""
+        log.debug("Raccourci Alt+Home détecté, exécution de moveToFirstLineInIndentation.")
+
+        if self.edit:
+            try:
+                caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
+                caretInfo.expand(textInfos.UNIT_LINE)
+                currentLineText = caretInfo.text
+                currentIndent = len(currentLineText) - len(currentLineText.lstrip())
+                currentLine = caretInfo.bookmark.startOffset
+
+                while True:
+                    caretInfo.move(textInfos.UNIT_LINE, -1)
+                    caretInfo.expand(textInfos.UNIT_LINE)
+                    lineText = caretInfo.text
+                    lineIndent = len(lineText) - len(lineText.lstrip())
+
+                    if lineIndent != currentIndent:
+                        # Revenir à la ligne précédente (la première du niveau actuel)
+                        caretInfo.move(textInfos.UNIT_LINE, 1)
+                        caretInfo.updateCaret()
+                        log.debug(f"Première ligne du niveau d'indentation actuel trouvée : {caretInfo.text.strip()}")
+                        speech.speakMessage(f"Première ligne du niveau d'indentation actuel trouvée : {caretInfo.text.strip()}")
+                        break
+
+                    if caretInfo.bookmark.startOffset >= currentLine:
+                        log.debug("Début du fichier atteint.")
+                        speech.speakMessage("Début du fichier atteint.")
+                        break
+
+            except Exception as e:
+                log.error(f"Erreur lors de la recherche de la première ligne du niveau d'indentation actuel : {e}")
+        else:
+            log.debug("Aucun objet d'édition trouvé.")
+
+    def script_moveToLastLineInIndentation(self, gesture):
+        """Déplace le curseur vers la dernière ligne du niveau d'indentation actuel."""
+        log.debug("Raccourci Alt+End détecté, exécution de moveToLastLineInIndentation.")
+
+        if self.edit:
+            try:
+                caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
+                caretInfo.expand(textInfos.UNIT_LINE)
+                currentLineText = caretInfo.text
+                currentIndent = len(currentLineText) - len(currentLineText.lstrip())
+                currentLine = caretInfo.bookmark.startOffset
+
+                while True:
+                    caretInfo.move(textInfos.UNIT_LINE, 1)
+                    caretInfo.expand(textInfos.UNIT_LINE)
+                    lineText = caretInfo.text
+                    lineIndent = len(lineText) - len(lineText.lstrip())
+
+                    if lineIndent != currentIndent:
+                        # Revenir à la ligne précédente (la dernière du niveau actuel)
+                        caretInfo.move(textInfos.UNIT_LINE, -1)
+                        caretInfo.updateCaret()
+                        log.debug(f"Dernière ligne du niveau d'indentation actuel trouvée : {caretInfo.text.strip()}")
+                        speech.speakMessage(f"Dernière ligne du niveau d'indentation actuel trouvée : {caretInfo.text.strip()}")
+                        break
+
+                    if caretInfo.bookmark.startOffset <= currentLine:
+                        log.debug("Fin du fichier atteinte.")
+                        speech.speakMessage("Fin du fichier atteinte.")
+                        break
+
+            except Exception as e:
+                log.error(f"Erreur lors de la recherche de la dernière ligne du niveau d'indentation actuel : {e}")
+        else:
+            log.debug("Aucun objet d'édition trouvé.")
+    
+    
     __gestures = {
-        "kb:NVDA+F2": "moveToNextFunction",
-        "kb:Shift+F2": "moveToPreviousFunction",
-        "kb:F7": "moveToNextClass",
-        "kb:Shift+F7": "moveToPreviousClass",
-        "kb:control+shift+r": "selectClass",
-        "kb:control+r": "selectFunction",
-        "kb:control+shift+delete": "deleteClass",
-        "kb:control+delete": "deleteFunction",
-        "kb:F5": "executePythonCode",
-    }
+    "kb:NVDA+F2": "moveToNextFunction",      
+    "kb:Shift+F2": "moveToPreviousFunction",
+    "kb:F7": "moveToNextClass",
+    "kb:Shift+F7": "moveToPreviousClass",
+    "kb:control+shift+r": "selectClass",
+    "kb:control+r": "selectFunction",
+    "kb:control+shift+delete": "deleteClass",
+    "kb:control+delete": "deleteFunction",
+    "kb:F5": "executePythonCode",
+    "kb:alt+downArrow": "moveToNextIndentLevel",
+    "kb:alt+upArrow": "moveToPreviousIndentLevel",
+    "kb:control+alt+downArrow": "moveToNextIndentedLine",
+    "kb:control+alt+upArrow": "moveToPreviousIndentedLine",
+    "kb:shift+alt+downArrow": "selectToNextIndentLevel",
+    "kb:shift+alt+upArrow": "selectToPreviousIndentLevel",
+    "kb:alt+!": "moveToFirstLineInIndentation",
+    "kb:alt+:": "moveToLastLineInIndentation",
+}
