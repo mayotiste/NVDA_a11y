@@ -9,6 +9,7 @@ import subprocess  # Pour lancer un terminal
 import os  # Pour manipuler les chemins de fichiers
 import keyboardHandler  # Pour simuler l'appui sur la touche Suppr
 import tempfile  # Pour créer des fichiers temporaires
+
 # Configuration du logger
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)  # Utiliser le niveau DEBUG pour voir tous les logs
@@ -236,63 +237,79 @@ class AppModule(appModuleHandler.AppModule):
         else:
             log.debug("Aucun objet d'édition trouvé.")
 
-    def _selectClass(self, caretInfo):
+    def script_selectCurrentClass(self, gesture):
         """Sélectionne la classe entière à partir de la position du curseur en fonction de l'indentation."""
-        try:
-            # Trouver le début de la classe (ligne contenant "class")
-            startInfo = caretInfo.copy()
-            startInfo.expand(textInfos.UNIT_LINE)
-            startInfo.collapse()
+        # Envoyer un message dans le journal de NVDA
+        log.debug("Raccourci DETECTE (Shift+F8)")
 
+        # Vérifier si l'objet d'édition est disponible
+        if self.edit:
+            try:
+                # Obtenir la position actuelle du curseur
+                caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
+                caretInfo.expand(textInfos.UNIT_LINE)  # Étendre à la ligne entière
+                currentLineText = caretInfo.text.strip()  # Obtenir le texte de la ligne actuelle
 
-            # Obtenir le texte de la ligne de déclaration de la classe
-            startLineText = startInfo.text
-            startIndentation = self._getIndentationLevel(startLineText)
+                # Vérifier si la ligne actuelle contient une déclaration de classe
+                if currentLineText.startswith("class "):
+                    # Si c'est le cas, on commence la sélection à partir de cette ligne
+                    startInfo = caretInfo.copy()
+                    startIndentation = self._getIndentationLevel(currentLineText)
+                else:
+                    # Sinon, on cherche la déclaration de classe précédente
+                    while True:
+                        caretInfo.move(textInfos.UNIT_LINE, -1)
+                        caretInfo.expand(textInfos.UNIT_LINE)
+                        lineText = caretInfo.text.strip()
 
+                        if lineText.startswith("class "):
+                            startInfo = caretInfo.copy()
+                            startIndentation = self._getIndentationLevel(lineText)
+                            break
 
-            # Trouver la fin de la classe en parcourant les lignes suivantes
-            endInfo = startInfo.copy()
-            endInfo.expand(textInfos.UNIT_LINE)
-            endInfo.collapse(end=True)
+                        # Si on atteint le début du document, on arrête la recherche
+                        if caretInfo.bookmark.startOffset <= 0:
+                            log.debug("Aucune déclaration de classe trouvée.")
+                            speech.speakMessage("Aucune déclaration de classe trouvée.")
+                            return
 
-
-            lineCounter = 0  # Compteur de lignes
-
-
-            while True:
-                endInfo.move(textInfos.UNIT_LINE, 1)
+                # Trouver la fin de la classe en parcourant les lignes suivantes
+                endInfo = startInfo.copy()
                 endInfo.expand(textInfos.UNIT_LINE)
-                lineText = endInfo.text
-                currentIndentation = self._getIndentationLevel(lineText)
+                endInfo.collapse(end=True)
 
+                lineCounter = 0  # Compteur de lignes
 
-                # Si l'indentation est inférieure ou égale à celle de la déclaration
-                if currentIndentation <= startIndentation:
-                    # Si la ligne contient du texte, on s'arrête
-                    if lineText.strip():
-                        # Revenir en arrière d'une ligne
-                        endInfo.move(textInfos.UNIT_LINE, -1)
-                        endInfo.expand(textInfos.UNIT_LINE)
-                        break
+                while True:
+                    endInfo.move(textInfos.UNIT_LINE, 1)
+                    endInfo.expand(textInfos.UNIT_LINE)
+                    lineText = endInfo.text
+                    currentIndentation = self._getIndentationLevel(lineText)
 
+                    # Si l'indentation est inférieure ou égale à celle de la déclaration
+                    if currentIndentation <= startIndentation:
+                        # Si la ligne contient du texte, on s'arrête
+                        if lineText.strip():
+                            # Revenir en arrière d'une ligne
+                            endInfo.move(textInfos.UNIT_LINE, -1)
+                            endInfo.expand(textInfos.UNIT_LINE)
+                            break
 
-                lineCounter += 1
+                    lineCounter += 1
 
+                # Appliquer la sélection
+                selectionInfo = self.edit.makeTextInfo(startInfo)
+                selectionInfo.setEndPoint(endInfo, "endToEnd")
+                self.edit.selection = selectionInfo
 
-            # Appliquer la sélection
-            selectionInfo = self.edit.makeTextInfo(startInfo)
-            selectionInfo.setEndPoint(endInfo, "endToEnd")
-            self.edit.selection = selectionInfo
+                log.debug(f"Classe sélectionnée avec succès. Nombre de lignes sélectionnées : {lineCounter}")
+                speech.speakMessage(f"Classe sélectionnée. {lineCounter} lignes sélectionnées.")
 
-
-            log.debug(f"Classe sélectionnée avec succès. Nombre de lignes sélectionnées : {lineCounter}")
-            speech.speakMessage(f"Classe sélectionnée. {lineCounter} lignes sélectionnées.")
-
-
-        except Exception as e:
-            log.error(f"Erreur lors de la sélection de la classe : {e}")
-            speech.speakMessage("Erreur lors de la sélection de la classe.")
-
+            except Exception as e:
+                log.error(f"Erreur lors de la sélection de la classe : {e}")
+                speech.speakMessage("Erreur lors de la sélection de la classe.")
+        else:
+            log.debug("Aucun objet d'édition trouvé.")
 
     def script_selectClass(self, gesture):
         """Sélectionne la classe entière à partir de la première ligne."""
@@ -328,62 +345,79 @@ class AppModule(appModuleHandler.AppModule):
     script_selectClass.category = "Notepad++"
 
 
-    def _selectFunction(self, caretInfo):
+    def script_selectCurrentFunction(self, gesture):
         """Sélectionne la fonction entière à partir de la position du curseur en fonction de l'indentation."""
-        try:
-            # Trouver le début de la fonction (ligne contenant "def")
-            startInfo = caretInfo.copy()
-            startInfo.expand(textInfos.UNIT_LINE)
-            startInfo.collapse()
+        # Envoyer un message dans le journal de NVDA
+        log.debug("Raccourci DETECTE (Shift+F3)")
 
+        # Vérifier si l'objet d'édition est disponible
+        if self.edit:
+            try:
+                # Obtenir la position actuelle du curseur
+                caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
+                caretInfo.expand(textInfos.UNIT_LINE)  # Étendre à la ligne entière
+                currentLineText = caretInfo.text.strip()  # Obtenir le texte de la ligne actuelle
 
-            # Obtenir le texte de la ligne de déclaration de la fonction
-            startLineText = startInfo.text
-            startIndentation = self._getIndentationLevel(startLineText)
+                # Vérifier si la ligne actuelle contient une déclaration de fonction
+                if currentLineText.startswith("def "):
+                    # Si c'est le cas, on commence la sélection à partir de cette ligne
+                    startInfo = caretInfo.copy()
+                    startIndentation = self._getIndentationLevel(currentLineText)
+                else:
+                    # Sinon, on cherche la déclaration de fonction précédente
+                    while True:
+                        caretInfo.move(textInfos.UNIT_LINE, -1)
+                        caretInfo.expand(textInfos.UNIT_LINE)
+                        lineText = caretInfo.text.strip()
 
+                        if lineText.startswith("def "):
+                            startInfo = caretInfo.copy()
+                            startIndentation = self._getIndentationLevel(lineText)
+                            break
 
-            # Trouver la fin de la fonction en parcourant les lignes suivantes
-            endInfo = startInfo.copy()
-            endInfo.expand(textInfos.UNIT_LINE)
-            endInfo.collapse(end=True)
+                        # Si on atteint le début du document, on arrête la recherche
+                        if caretInfo.bookmark.startOffset <= 0:
+                            log.debug("Aucune déclaration de fonction trouvée.")
+                            speech.speakMessage("Aucune déclaration de fonction trouvée.")
+                            return
 
-
-            lineCounter = 0  # Compteur de lignes
-
-
-            while True:
-                endInfo.move(textInfos.UNIT_LINE, 1)
+                # Trouver la fin de la fonction en parcourant les lignes suivantes
+                endInfo = startInfo.copy()
                 endInfo.expand(textInfos.UNIT_LINE)
-                lineText = endInfo.text
-                currentIndentation = self._getIndentationLevel(lineText)
+                endInfo.collapse(end=True)
 
+                lineCounter = 0  # Compteur de lignes
 
-                # Si l'indentation est inférieure ou égale à celle de la déclaration
-                if currentIndentation <= startIndentation:
-                    # Si la ligne contient du texte, on s'arrête
-                    if lineText.strip():
-                        # Revenir en arrière d'une ligne
-                        endInfo.move(textInfos.UNIT_LINE, -1)
-                        endInfo.expand(textInfos.UNIT_LINE)
-                        break
+                while True:
+                    endInfo.move(textInfos.UNIT_LINE, 1)
+                    endInfo.expand(textInfos.UNIT_LINE)
+                    lineText = endInfo.text
+                    currentIndentation = self._getIndentationLevel(lineText)
 
+                    # Si l'indentation est inférieure ou égale à celle de la déclaration
+                    if currentIndentation <= startIndentation:
+                        # Si la ligne contient du texte, on s'arrête
+                        if lineText.strip():
+                            # Revenir en arrière d'une ligne
+                            endInfo.move(textInfos.UNIT_LINE, -1)
+                            endInfo.expand(textInfos.UNIT_LINE)
+                            break
 
-                lineCounter += 1
+                    lineCounter += 1
 
+                # Appliquer la sélection
+                selectionInfo = self.edit.makeTextInfo(startInfo)
+                selectionInfo.setEndPoint(endInfo, "endToEnd")
+                self.edit.selection = selectionInfo
 
-            # Appliquer la sélection
-            selectionInfo = self.edit.makeTextInfo(startInfo)
-            selectionInfo.setEndPoint(endInfo, "endToEnd")
-            self.edit.selection = selectionInfo
+                log.debug(f"Fonction sélectionnée avec succès. Nombre de lignes sélectionnées : {lineCounter}")
+                speech.speakMessage(f"Fonction sélectionnée. {lineCounter} lignes sélectionnées.")
 
-
-            log.debug(f"Fonction sélectionnée avec succès. Nombre de lignes sélectionnées : {lineCounter}")
-            speech.speakMessage(f"Fonction sélectionnée. {lineCounter} lignes sélectionnées.")
-
-
-        except Exception as e:
-            log.error(f"Erreur lors de la sélection de la fonction : {e}")
-            speech.speakMessage("Erreur lors de la sélection de la fonction.")
+            except Exception as e:
+                log.error(f"Erreur lors de la sélection de la fonction : {e}")
+                speech.speakMessage("Erreur lors de la sélection de la fonction.")
+        else:
+            log.debug("Aucun objet d'édition trouvé.")
 
 
     def script_selectFunction(self, gesture):
@@ -461,7 +495,7 @@ class AppModule(appModuleHandler.AppModule):
             selectionInfo = self.edit.makeTextInfo(startInfo)
             selectionInfo.setEndPoint(endInfo, "endToEnd")
             self.edit.selection = selectionInfo
-            speech.speakMessage(f"Tu es sûr le sang?.")
+            speech.speakMessage(f"êtes vous sûr de vouloir supprimer la classe?")
             # Demander confirmation avant suppression avec un message personnalisé
             if gui.messageBox(
                 "Voulez-vous vraiment supprimer cette classe ?",  # Message personnalisé
@@ -480,37 +514,92 @@ class AppModule(appModuleHandler.AppModule):
             log.error(f"Erreur lors de la suppression de la classe : {e}")
             speech.speakMessage("Erreur lors de la suppression de la classe.")
 
-    def script_deleteClass(self, gesture):
-        """Supprime la classe entière à partir de la première ligne après confirmation."""
-        log.debug("Raccourci détecté (Ctrl+Shift+Delete)")
+    def script_deleteCurrentClass(self, gesture):
+        """Supprime la classe entière sur laquelle le curseur est positionné après confirmation."""
+        # Envoyer un message dans le journal de NVDA
+        log.debug("Raccourci DETECTE (Ctrl+Shift+Delete)")
 
-
+        # Vérifier si l'objet d'édition est disponible
         if self.edit:
             try:
                 # Obtenir la position actuelle du curseur
                 caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
                 caretInfo.expand(textInfos.UNIT_LINE)  # Étendre à la ligne entière
-                lineText = caretInfo.text.strip()
+                currentLineText = caretInfo.text.strip()  # Obtenir le texte de la ligne actuelle
 
-
-                # Vérifier si la ligne commence par "class " (déclaration de classe Python)
-                if lineText.startswith("class "):
-                    self._deleteClass(caretInfo)
-                    log.debug("Classe supprimée avec succès.")
-                    speech.speakMessage("Classe supprimée.")
+                # Vérifier si la ligne actuelle contient une déclaration de classe
+                if currentLineText.startswith("class "):
+                    # Si c'est le cas, on commence la suppression à partir de cette ligne
+                    startInfo = caretInfo.copy()
+                    startIndentation = self._getIndentationLevel(currentLineText)
                 else:
-                    log.debug("Le curseur n'est pas sur une déclaration de classe.")
-                    speech.speakMessage("Le curseur n'est pas sur une déclaration de classe.")
+                    # Sinon, on cherche la déclaration de classe précédente
+                    while True:
+                        caretInfo.move(textInfos.UNIT_LINE, -1)
+                        caretInfo.expand(textInfos.UNIT_LINE)
+                        lineText = caretInfo.text.strip()
 
+                        if lineText.startswith("class "):
+                            startInfo = caretInfo.copy()
+                            startIndentation = self._getIndentationLevel(lineText)
+                            break
+
+                        # Si on atteint le début du document, on arrête la recherche
+                        if caretInfo.bookmark.startOffset <= 0:
+                            log.debug("Aucune déclaration de classe trouvée.")
+                            speech.speakMessage("Aucune déclaration de classe trouvée.")
+                            return
+
+                # Trouver la fin de la classe en parcourant les lignes suivantes
+                endInfo = startInfo.copy()
+                endInfo.expand(textInfos.UNIT_LINE)
+                endInfo.collapse(end=True)
+
+                lineCounter = 0  # Compteur de lignes
+
+                while True:
+                    endInfo.move(textInfos.UNIT_LINE, 1)
+                    endInfo.expand(textInfos.UNIT_LINE)
+                    lineText = endInfo.text
+                    currentIndentation = self._getIndentationLevel(lineText)
+
+                    # Si l'indentation est inférieure ou égale à celle de la déclaration
+                    if currentIndentation <= startIndentation:
+                        # Si la ligne contient du texte, on s'arrête
+                        if lineText.strip():
+                            # Revenir en arrière d'une ligne
+                            endInfo.move(textInfos.UNIT_LINE, -1)
+                            endInfo.expand(textInfos.UNIT_LINE)
+                            break
+
+                    lineCounter += 1
+
+                # Appliquer la sélection
+                selectionInfo = self.edit.makeTextInfo(startInfo)
+                selectionInfo.setEndPoint(endInfo, "endToEnd")
+                self.edit.selection = selectionInfo
+
+                # Demander confirmation avant suppression avec un message personnalisé
+                speech.speakMessage(f"êtes vous sûr de vouloir supprimer la classe?")
+                if gui.messageBox(
+                    "Voulez-vous vraiment supprimer cette classe ?",  # Message personnalisé
+                    "Confirmation de suppression",  # Titre de la boîte de dialogue
+                    wx.YES_NO | wx.ICON_QUESTION  # Boutons Oui/Non et icône de question
+                ) == wx.YES:
+                    # Simuler l'appui sur la touche Suppr pour supprimer la sélection
+                    keyboardHandler.KeyboardInputGesture.fromName("delete").send()
+                    log.debug(f"Classe supprimée avec succès. Nombre de lignes supprimées : {lineCounter}")
+                    speech.speakMessage(f"Classe supprimée. {lineCounter} lignes supprimées.")
+                else:
+                    log.debug("Suppression annulée par l'utilisateur.")
+                    speech.speakMessage("Suppression annulée.")
 
             except Exception as e:
                 log.error(f"Erreur lors de la suppression de la classe : {e}")
+                speech.speakMessage("Erreur lors de la suppression de la classe.")
         else:
             log.debug("Aucun objet d'édition trouvé.")
-        # Ajout du raccourci clavier correspondant dans Notepad++
-    
-    script_deleteClass.__doc__ = _("Supprime la classe entière après confirmation")
-    script_deleteClass.category = "Notepad++"
+
 
     def _deleteFunction(self, caretInfo):
         """Supprime la fonction entière à partir de la position du curseur après confirmation."""
@@ -560,7 +649,7 @@ class AppModule(appModuleHandler.AppModule):
             selectionInfo.setEndPoint(endInfo, "endToEnd")
             self.edit.selection = selectionInfo
 
-            speech.speakMessage(f"Tu es sûr le sang?.")
+            speech.speakMessage(f"êtes vous sûr de vouloir supprimer la fonction?")
 
             # Demander confirmation avant suppression
             if gui.messageBox(
@@ -582,37 +671,93 @@ class AppModule(appModuleHandler.AppModule):
             speech.speakMessage("Erreur lors de la suppression de la fonction.")
 
 
-    def script_deleteFunction(self, gesture):
-        """Supprime la fonction entière à partir de la première ligne après confirmation."""
-        log.debug("Raccourci détecté (Ctrl+Delete)")
+    def script_deleteCurrentFunction(self, gesture):
+        """Supprime la fonction entière sur laquelle le curseur est positionné après confirmation."""
+        # Envoyer un message dans le journal de NVDA
+        log.debug("Raccourci DETECTE (Ctrl+Shift+Delete)")
 
-
+        # Vérifier si l'objet d'édition est disponible
         if self.edit:
             try:
                 # Obtenir la position actuelle du curseur
                 caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
                 caretInfo.expand(textInfos.UNIT_LINE)  # Étendre à la ligne entière
-                lineText = caretInfo.text.strip()
+                currentLineText = caretInfo.text.strip()  # Obtenir le texte de la ligne actuelle
 
-
-                # Vérifier si la ligne commence par "def " (déclaration de fonction Python)
-                if lineText.startswith("def "):
-                    self._deleteFunction(caretInfo)
-                    log.debug("Fonction supprimée avec succès.")
-                    speech.speakMessage("Fonction supprimée.")
+                # Vérifier si la ligne actuelle contient une déclaration de fonction
+                if currentLineText.startswith("def "):
+                    # Si c'est le cas, on commence la suppression à partir de cette ligne
+                    startInfo = caretInfo.copy()
+                    startIndentation = self._getIndentationLevel(currentLineText)
                 else:
-                    log.debug("Le curseur n'est pas sur une déclaration de fonction.")
-                    speech.speakMessage("Le curseur n'est pas sur une déclaration de fonction.")
+                    # Sinon, on cherche la déclaration de fonction précédente
+                    while True:
+                        caretInfo.move(textInfos.UNIT_LINE, -1)
+                        caretInfo.expand(textInfos.UNIT_LINE)
+                        lineText = caretInfo.text.strip()
 
+                        if lineText.startswith("def "):
+                            startInfo = caretInfo.copy()
+                            startIndentation = self._getIndentationLevel(lineText)
+                            break
+
+                        # Si on atteint le début du document, on arrête la recherche
+                        if caretInfo.bookmark.startOffset <= 0:
+                            log.debug("Aucune déclaration de fonction trouvée.")
+                            speech.speakMessage("Aucune déclaration de fonction trouvée.")
+                            return
+
+                # Trouver la fin de la fonction en parcourant les lignes suivantes
+                endInfo = startInfo.copy()
+                endInfo.expand(textInfos.UNIT_LINE)
+                endInfo.collapse(end=True)
+
+                lineCounter = 0  # Compteur de lignes
+
+                while True:
+                    endInfo.move(textInfos.UNIT_LINE, 1)
+                    endInfo.expand(textInfos.UNIT_LINE)
+                    lineText = endInfo.text
+                    currentIndentation = self._getIndentationLevel(lineText)
+
+                    # Si l'indentation est inférieure ou égale à celle de la déclaration
+                    if currentIndentation <= startIndentation:
+                        # Si la ligne contient du texte, on s'arrête
+                        if lineText.strip():
+                            # Revenir en arrière d'une ligne
+                            endInfo.move(textInfos.UNIT_LINE, -1)
+                            endInfo.expand(textInfos.UNIT_LINE)
+                            break
+
+                    lineCounter += 1
+
+                # Appliquer la sélection
+                selectionInfo = self.edit.makeTextInfo(startInfo)
+                selectionInfo.setEndPoint(endInfo, "endToEnd")
+                self.edit.selection = selectionInfo
+
+                # Demander confirmation avant suppression avec un message personnalisé
+                speech.speakMessage(f"êtes vous sûr de vouloir supprimer la fonction?")
+                if gui.messageBox(
+                    "Voulez-vous vraiment supprimer cette fonction ?",  # Message personnalisé
+                    "Confirmation de suppression",  # Titre de la boîte de dialogue
+                    wx.YES_NO | wx.ICON_QUESTION  # Boutons Oui/Non et icône de question
+                ) == wx.YES:
+                    # Simuler l'appui sur la touche Suppr pour supprimer la sélection
+                    keyboardHandler.KeyboardInputGesture.fromName("delete").send()
+                    log.debug(f"Fonction supprimée avec succès. Nombre de lignes supprimées : {lineCounter}")
+                    speech.speakMessage(f"Fonction supprimée. {lineCounter} lignes supprimées.")
+                else:
+                    log.debug("Suppression annulée par l'utilisateur.")
+                    speech.speakMessage("Suppression annulée.")
 
             except Exception as e:
                 log.error(f"Erreur lors de la suppression de la fonction : {e}")
+                speech.speakMessage("Erreur lors de la suppression de la fonction.")
         else:
             log.debug("Aucun objet d'édition trouvé.")
-    
     # Ajout du raccourci clavier correspondant dans Notepad++
-    script_deleteFunction.__doc__ = _("Supprime la fonction entière après confirmation")
-    script_deleteFunction.category = "Notepad++"
+
 
 
     def _executePythonCode(self):
@@ -672,7 +817,7 @@ class AppModule(appModuleHandler.AppModule):
 
 
     def script_moveToNextIndentLevel(self, gesture):
-        """Déplace le curseur vers le prochain niveau d'indentation."""
+        """Déplace le curseur vers le prochain niveau d'indentation et annonce le niveau actuel."""
         # Envoyer un message dans le journal de NVDA
         log.debug("Raccourci DETECTE (Alt+Down)")
 
@@ -683,8 +828,19 @@ class AppModule(appModuleHandler.AppModule):
                 caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
                 caretInfo.expand(textInfos.UNIT_LINE)  # Étendre à la ligne entière
                 currentLineText = caretInfo.text
-                currentIndent = len(currentLineText) - len(currentLineText.lstrip())  # Calculer l'indentation actuelle
-                currentLine = caretInfo.bookmark.startOffset  # Initialiser la position de la ligne actuelle
+
+                # Calculer l'indentation actuelle en tenant compte des tabulations
+                currentIndent = 0
+                for char in currentLineText:
+                    if char == '\t':
+                        currentIndent += 4  # Une tabulation = 4 espaces (ajuste selon ton éditeur)
+                    elif char == ' ':
+                        currentIndent += 1
+                    else:
+                        break
+
+                # Initialiser la position de la ligne actuelle
+                currentLine = caretInfo.bookmark.startOffset
 
                 # Parcourir les lignes suivantes pour trouver un niveau d'indentation différent
                 while True:
@@ -692,20 +848,31 @@ class AppModule(appModuleHandler.AppModule):
                     caretInfo.move(textInfos.UNIT_LINE, 1)
                     caretInfo.expand(textInfos.UNIT_LINE)
                     lineText = caretInfo.text
-                    lineIndent = len(lineText) - len(lineText.lstrip())  # Calculer l'indentation de la ligne
+
+                    # Calculer l'indentation de la ligne suivante
+                    lineIndent = 0
+                    for char in lineText:
+                        if char == '\t':
+                            lineIndent += 4  # Une tabulation = 4 espaces (ajuste selon ton éditeur)
+                        elif char == ' ':
+                            lineIndent += 1
+                        else:
+                            break
 
                     # Vérifier si l'indentation est différente de l'actuelle
                     if lineIndent != currentIndent:
                         # Déplacer le curseur au début de la ligne
                         caretInfo.updateCaret()
                         log.debug(f"Niveau d'indentation suivant trouvé : {lineText.strip()}")
-                        speech.speakMessage(f"Niveau d'indentation suivant trouvé : {lineText.strip()}")
+
+                        # Annoncer le niveau d'indentation actuel de la nouvelle ligne
+                        speech.speakMessage(f"Indentation actuel : {lineIndent}")
                         break
 
                     # Si on atteint la fin du document, arrêter la recherche
                     if caretInfo.bookmark.startOffset <= currentLine:
                         log.debug("Aucun niveau d'indentation suivant trouvé.")
-                        speech.speakMessage("Aucun niveau d'indentation suivant trouvé.")
+                        speech.speakMessage("Fin du document atteinte.")
                         break
 
                     # Mettre à jour la position actuelle pour éviter les boucles infinies
@@ -715,47 +882,10 @@ class AppModule(appModuleHandler.AppModule):
                 log.error(f"Erreur lors de la recherche du niveau d'indentation suivant : {e}")
         else:
             log.debug("Aucun objet d'édition trouvé.")
-
-    def script_moveToPreviousIndentLevel(self, gesture):
-        """Déplace le curseur vers le niveau d'indentation précédent."""
-        log.debug("Raccourci Alt+Up détecté, exécution de moveToPreviousIndentLevel.")
-
-        if self.edit:
-            try:
-                caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
-                caretInfo.expand(textInfos.UNIT_LINE)
-                currentLineText = caretInfo.text
-                currentIndent = len(currentLineText) - len(currentLineText.lstrip())
-                currentLine = caretInfo.bookmark.startOffset
-
-                while True:
-                    caretInfo.move(textInfos.UNIT_LINE, -1)  # Déplacer à la ligne précédente
-                    caretInfo.expand(textInfos.UNIT_LINE)
-                    lineText = caretInfo.text
-                    lineIndent = len(lineText) - len(lineText.lstrip())
-
-                    if lineIndent != currentIndent:
-                        caretInfo.updateCaret()
-                        log.debug(f"Niveau d'indentation précédent trouvé : {lineText.strip()}")
-                        speech.speakMessage(f"Niveau d'indentation précédent trouvé : {lineText.strip()}")
-                        break
-
-                    if caretInfo.bookmark.startOffset >= currentLine:
-                        log.debug("Aucun niveau d'indentation précédent trouvé.")
-                        speech.speakMessage("Aucun niveau d'indentation précédent trouvé.")
-                        break
-
-                    currentLine = caretInfo.bookmark.startOffset
-
-            except Exception as e:
-                log.error(f"Erreur lors de la recherche du niveau d'indentation précédent : {e}")
-        else:
-            log.debug("Aucun objet d'édition trouvé.")
-
     
-    def script_moveToNextIndentedLine(self, gesture):
-        """Déplace le curseur vers la prochaine ligne indentée, en ignorant les lignes vides et les lignes non indentées avec du texte."""
-        log.debug("Raccourci Control+Alt+Down détecté, exécution de moveToNextIndentedLine.")
+    def script_moveToPreviousIndentLevel(self, gesture):
+        """Déplace le curseur vers le niveau d'indentation précédent et annonce le niveau actuel."""
+        log.debug("Raccourci Alt+Up détecté, exécution de moveToPreviousIndentLevel.")
 
         if self.edit:
             try:
@@ -764,74 +894,175 @@ class AppModule(appModuleHandler.AppModule):
                 caretInfo.expand(textInfos.UNIT_LINE)
                 currentLineText = caretInfo.text
                 currentIndent = len(currentLineText) - len(currentLineText.lstrip())  # Calculer l'indentation actuelle
-                currentLine = caretInfo.bookmark.startOffset  # Position de départ de la ligne actuelle
+                currentLine = caretInfo.bookmark.startOffset  # Initialiser la position de la ligne actuelle
 
-                # Parcourir les lignes suivantes pour trouver une ligne indentée
+                # Annoncer le niveau d'indentation actuel
+                speech.speakMessage(f"Niveau d'indentation actuel : {currentIndent}")
+
+                # Parcourir les lignes précédentes pour trouver un niveau d'indentation différent
                 while True:
-                    # Déplacer le curseur à la ligne suivante
-                    caretInfo.move(textInfos.UNIT_LINE, 1)
+                    # Déplacer le curseur à la ligne précédente
+                    caretInfo.move(textInfos.UNIT_LINE, -1)
                     caretInfo.expand(textInfos.UNIT_LINE)
                     lineText = caretInfo.text
                     lineIndent = len(lineText) - len(lineText.lstrip())  # Calculer l'indentation de la ligne
 
-                    # Vérifier si la ligne est indentée (indentation > 0) et non vide
-                    if lineIndent > 0 and lineText.strip():
+                    # Vérifier si l'indentation est différente de l'actuelle
+                    if lineIndent != currentIndent:
                         # Déplacer le curseur au début de la ligne
                         caretInfo.updateCaret()
-                        log.debug(f"Ligne indentée suivante trouvée : {lineText.strip()}")
-                        speech.speakMessage(f"Ligne indentée suivante trouvée : {lineText.strip()}")
+                        log.debug(f"Niveau d'indentation précédent trouvé : {lineText.strip()}")
+                        speech.speakMessage(f"Niveau d'indentation précédent trouvé : {lineIndent}")
                         break
 
-                    # Si on atteint la fin du document, arrêter la recherche
-                    if caretInfo.bookmark.startOffset <= currentLine:
-                        log.debug("Fin du document atteinte. Aucune ligne indentée suivante trouvée.")
-                        speech.speakMessage("Fin du document atteinte. Aucune ligne indentée suivante trouvée.")
+                    # Si on atteint le début du document, arrêter la recherche
+                    if caretInfo.bookmark.startOffset >= currentLine:
+                        log.debug("Aucun niveau d'indentation précédent trouvé.")
+                        speech.speakMessage("Aucun niveau d'indentation précédent trouvé.")
                         break
 
                     # Mettre à jour la position actuelle pour éviter les boucles infinies
                     currentLine = caretInfo.bookmark.startOffset
 
             except Exception as e:
-                log.error(f"Erreur lors de la recherche de la ligne indentée suivante : {e}")
+                log.error(f"Erreur lors de la recherche du niveau d'indentation précédent : {e}")
         else:
             log.debug("Aucun objet d'édition trouvé.")
-    
-    def script_moveToPreviousIndentedLine(self, gesture):
-        """Déplace le curseur vers la ligne indentée précédente."""
-        log.debug("Raccourci Control+Alt+Up détecté, exécution de moveToPreviousIndentedLine.")
+
+        
+    def script_moveToNextIndentedLine(self, gesture):
+        """Déplace le curseur vers la ligne suivante ayant le même niveau d'indentation et annonce le niveau actuel."""
+        log.debug("Raccourci Control+Alt+Down détecté, exécution de moveToNextIndentedLine.")
 
         if self.edit:
             try:
+                # Obtenir la position actuelle du curseur
                 caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
-                caretInfo.expand(textInfos.UNIT_LINE)
+                caretInfo.expand(textInfos.UNIT_LINE)  # Étendre à la ligne entière
                 currentLineText = caretInfo.text
-                currentIndent = len(currentLineText) - len(currentLineText.lstrip())
+
+                # Calculer l'indentation actuelle en tenant compte des tabulations
+                currentIndent = 0
+                for char in currentLineText:
+                    if char == '\t':
+                        currentIndent += 4  # Une tabulation = 4 espaces (ajuste selon ton éditeur)
+                    elif char == ' ':
+                        currentIndent += 1
+                    else:
+                        break
+
+                # Annoncer le niveau d'indentation actuel
+                speech.speakMessage(f"Indentation actuel : {currentIndent}")
+
+                # Initialiser la position de la ligne actuelle
                 currentLine = caretInfo.bookmark.startOffset
 
+                # Parcourir les lignes suivantes pour trouver une ligne avec le même niveau d'indentation
                 while True:
-                    caretInfo.move(textInfos.UNIT_LINE, -1)
+                    # Déplacer le curseur à la ligne suivante
+                    caretInfo.move(textInfos.UNIT_LINE, 1)
                     caretInfo.expand(textInfos.UNIT_LINE)
                     lineText = caretInfo.text
-                    lineIndent = len(lineText) - len(lineText.lstrip())
 
-                    if lineIndent > 0:  # Trouver une ligne indentée
+                    # Calculer l'indentation de la ligne suivante
+                    lineIndent = 0
+                    for char in lineText:
+                        if char == '\t':
+                            lineIndent += 4  # Une tabulation = 4 espaces (ajuste selon ton éditeur)
+                        elif char == ' ':
+                            lineIndent += 1
+                        else:
+                            break
+
+                    # Vérifier si l'indentation est égale à l'actuelle
+                    if lineIndent == currentIndent:
+                        # Déplacer le curseur au début de la ligne
                         caretInfo.updateCaret()
-                        log.debug(f"Ligne indentée précédente trouvée : {lineText.strip()}")
-                        speech.speakMessage(f"Ligne indentée précédente trouvée : {lineText.strip()}")
+                        log.debug(f"Ligne suivante avec le même niveau d'indentation trouvée : {lineText.strip()}")
+                        speech.speakMessage(f"Ligne suivante avec le même niveau d'indentation trouvée : {lineText.strip()}")
                         break
 
-                    if caretInfo.bookmark.startOffset >= currentLine:
-                        log.debug("Aucune ligne indentée précédente trouvée.")
-                        speech.speakMessage("Aucune ligne indentée précédente trouvée.")
+                    # Si on atteint la fin du document, arrêter la recherche
+                    if caretInfo.bookmark.startOffset <= currentLine:
+                        log.debug("Aucune ligne suivante avec le même niveau d'indentation trouvée.")
+                        speech.speakMessage("Fin du document atteinte.")
                         break
 
+                    # Mettre à jour la position actuelle pour éviter les boucles infinies
                     currentLine = caretInfo.bookmark.startOffset
 
             except Exception as e:
-                log.error(f"Erreur lors de la recherche de la ligne indentée précédente : {e}")
+                log.error(f"Erreur lors de la recherche de la ligne suivante avec le même niveau d'indentation : {e}")
         else:
             log.debug("Aucun objet d'édition trouvé.")
 
+
+    def script_moveToPreviousIndentLevel(self, gesture):
+        """Déplace le curseur vers le niveau d'indentation précédent et annonce le niveau actuel."""
+        log.debug("Raccourci Alt+Up détecté, exécution de moveToPreviousIndentLevel.")
+
+        if self.edit:
+            try:
+                # Obtenir la position actuelle du curseur
+                caretInfo = self.edit.makeTextInfo(textInfos.POSITION_CARET)
+                caretInfo.expand(textInfos.UNIT_LINE)  # Étendre à la ligne entière
+                currentLineText = caretInfo.text
+
+                # Calculer l'indentation actuelle en tenant compte des tabulations
+                currentIndent = 0
+                for char in currentLineText:
+                    if char == '\t':
+                        currentIndent += 4  # Une tabulation = 4 espaces (ajuste selon ton éditeur)
+                    elif char == ' ':
+                        currentIndent += 1
+                    else:
+                        break
+
+                # Initialiser la position de la ligne actuelle
+                currentLine = caretInfo.bookmark.startOffset
+
+                # Parcourir les lignes précédentes pour trouver un niveau d'indentation différent
+                while True:
+                    # Déplacer le curseur à la ligne précédente
+                    caretInfo.move(textInfos.UNIT_LINE, -1)
+                    caretInfo.expand(textInfos.UNIT_LINE)
+                    lineText = caretInfo.text
+
+                    # Calculer l'indentation de la ligne précédente
+                    lineIndent = 0
+                    for char in lineText:
+                        if char == '\t':
+                            lineIndent += 4  # Une tabulation = 4 espaces (ajuste selon ton éditeur)
+                        elif char == ' ':
+                            lineIndent += 1
+                        else:
+                            break
+
+                    # Vérifier si l'indentation est différente de l'actuelle
+                    if lineIndent != currentIndent:
+                        # Déplacer le curseur au début de la ligne
+                        caretInfo.updateCaret()
+                        log.debug(f"Niveau d'indentation précédent trouvé : {lineText.strip()}")
+
+                        # Annoncer le niveau d'indentation actuel de la nouvelle ligne
+                        speech.speakMessage(f"Indentation actuel : {lineIndent}")
+                        break
+
+                    # Si on atteint le début du document, arrêter la recherche
+                    if caretInfo.bookmark.startOffset >= currentLine:
+                        log.debug("Aucun niveau d'indentation précédent trouvé.")
+                        speech.speakMessage("Aucun niveau d'indentation précédent trouvé.")
+                        break
+
+                    # Mettre à jour la position actuelle pour éviter les boucles infinies
+                    currentLine = caretInfo.bookmark.startOffset
+
+            except Exception as e:
+                log.error(f"Erreur lors de la recherche du niveau d'indentation précédent : {e}")
+        else:
+            log.debug("Aucun objet d'édition trouvé.")
+
+            
     def script_selectToPreviousIndentLevel(self, gesture):
         """Sélectionne le texte jusqu'au niveau d'indentation précédent, puis place le curseur au début de la sélection."""
         log.debug("Raccourci Shift+Alt+Up détecté, exécution de selectToPreviousIndentLevel.")
@@ -1002,13 +1233,13 @@ class AppModule(appModuleHandler.AppModule):
     "kb:Shift+F2": "moveToPreviousFunction",
     "kb:F7": "moveToNextClass",
     "kb:Shift+F7": "moveToPreviousClass",
-    "kb:control+shift+r": "selectClass",
-    "kb:control+r": "selectFunction",
-    "kb:control+shift+delete": "deleteClass",
-    "kb:control+delete": "deleteFunction",
-    "kb:F5": "executePythonCode",
+    "kb:control+shift+r": "selectCurrentClass",
+    "kb:control+r": "selectCurrentFunction",
+    "kb:control+shift+delete": "deleteCurrentClass",
+    "kb:control+delete": "deleteCurrentFunction",
+    "kb:control+F5": "executePythonCode",
     "kb:alt+downArrow": "moveToNextIndentLevel",
-    "kb:alt+upArrow": "moveToPreviousIndentLevel",
+    "kb:alt+upArrow": "moveToPreviousIndentLevel",      
     "kb:control+alt+downArrow": "moveToNextIndentedLine",
     "kb:control+alt+upArrow": "moveToPreviousIndentedLine",
     "kb:shift+alt+downArrow": "selectToNextIndentLevel",
